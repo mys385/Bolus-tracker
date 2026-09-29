@@ -91,26 +91,45 @@ let d=JSON.parse(localStorage.getItem(K)||"null")||{
  {name:"Evening",start:"18:00",end:"24:00",icr:10,isf:30,target:125}],
  doses:[]
 };
+function normalize(){
+if(!Number.isFinite(Number(d.duration))||Number(d.duration)<=0)d.duration=4;
+if(!Number.isFinite(Number(d.round))||Number(d.round)<=0)d.round=0.1;
+if(!Array.isArray(d.doses))d.doses=[];
+if(!Array.isArray(d.profiles)||!d.profiles.length)d.profiles=[{name:"Default",start:"00:00",end:"24:00",icr:10,isf:30,target:125}];
+}
+normalize();
 function save(){localStorage.setItem(K,JSON.stringify(d))}
 function tab(x){["calc","log","settings"].forEach(y=>document.getElementById(y).classList.toggle("hidden",x!==y));if(x==="log")renderLog();if(x==="settings")renderSettings()}
 function mins(s){let a=s.split(":").map(Number);return a[0]*60+a[1]}
 function profileAt(dt=new Date()){let t=dt.getHours()*60+dt.getMinutes();return d.profiles.find(p=>{let a=mins(p.start),b=mins(p.end);return a<b?t>=a&&t<b:t>=a||t<b})||d.profiles[0]}
 function iobAt(dt=new Date()){let total=0,life=d.duration*3600000;for(let x of d.doses){let age=dt-new Date(x.time);if(age>=0&&age<life)total+=x.units*(1-age/life)}return total}
-function round(x){return Math.max(0,Math.round(x/d.round)*d.round)}
+function round(x){const r=Number(d.round);const step=Number.isFinite(r)&&r>0?r:0.1;return Math.max(0,Math.round(x/step)*step)}
 function init(){
 document.getElementById("duration").value=d.duration;document.getElementById("round").value=d.round;
 let s=document.getElementById("profile");s.innerHTML=d.profiles.map((p,i)=>`<option value="${i}">${p.name} (${p.start}–${p.end})</option>`).join("");s.value=d.profiles.indexOf(profileAt());renderLog();renderSettings();setInterval(renderLog,30000);
 }
 function calc(){
-let bg=+document.getElementById("bg").value,c=+document.getElementById("carbs").value,p=d.profiles[+document.getElementById("profile").value],io=iobAt();
-if(!Number.isFinite(bg)||!Number.isFinite(c))return alert("Enter glucose and carbs.");
-let meal=c/p.icr,corr=Math.max(0,(bg-p.target)/p.isf),raw=meal+corr-io,out=round(raw);
-document.getElementById("result").style.display="block";document.getElementById("dose").textContent=out.toFixed(1)+" U";
-document.getElementById("meal").textContent=meal.toFixed(2)+" U";document.getElementById("corr").textContent=corr.toFixed(2)+" U";document.getElementById("iob").textContent=io.toFixed(2)+" U";document.getElementById("target").textContent=p.target+" mg/dL";
+const bgInput=document.getElementById("bg").value.trim();
+const carbsInput=document.getElementById("carbs").value.trim();
+const bg=Number.parseFloat(bgInput);
+const c=Number.parseFloat(carbsInput);
+const profileIndex=Number.parseInt(document.getElementById("profile").value,10);
+const p=d.profiles[Number.isFinite(profileIndex)?profileIndex:0];
+const io=iobAt();
+if(!Number.isFinite(bg)||!Number.isFinite(c)||c<0)return alert("Enter a valid glucose and carb amount.");
+const meal=c/Number(p.icr);
+const correction=Math.max(0,(bg-Number(p.target))/Number(p.isf));
+const raw=meal+correction-io;
+const out=round(raw);
+document.getElementById("result").style.display="block";
+document.getElementById("dose").textContent=out.toFixed(1)+" U";
+document.getElementById("meal").textContent=meal.toFixed(2)+" U";
+document.getElementById("corr").textContent=correction.toFixed(2)+" U";
+document.getElementById("iob").textContent=io.toFixed(2)+" U";
+document.getElementById("target").textContent=Number(p.target)+" mg/dL";
 document.getElementById("formula").textContent=`(${c} ÷ ${p.icr}) + max(0, (${bg} − ${p.target}) ÷ ${p.isf}) − ${io.toFixed(2)} IOB = ${raw.toFixed(2)} U → ${out.toFixed(1)} U`;
 window.lastDose=out;
-}
-function useDose(){document.getElementById("units").value=(window.lastDose??0).toFixed(1);document.getElementById("time").value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);tab("log")}
+}function useDose(){document.getElementById("units").value=(window.lastDose??0).toFixed(1);document.getElementById("time").value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);tab("log")}
 function addDose(){let u=+document.getElementById("units").value,t=document.getElementById("time").value;if(!u||!t)return alert("Enter units and time.");d.doses.push({units:u,time:new Date(t).toISOString()});d.doses.sort((a,b)=>new Date(a.time)-new Date(b.time));save();document.getElementById("units").value="";renderLog()}
 function renderLog(){
 let io=iobAt();document.getElementById("currentIOB").textContent=io.toFixed(1)+" U";
